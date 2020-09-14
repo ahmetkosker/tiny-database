@@ -1,5 +1,15 @@
 #include "construe.h"
 
+static int is_int(char *str)
+{
+    for (int i = 0; i < strlen(str); i++)
+    {
+        if (str[i] < 0x30 || str[i] > 0x39)
+            return -1;
+    }
+    return (strlen(str) == 0) ? -1 : 0;
+}
+
 statement_kind_t parse_statement(char *statement, void **p)
 {
     select_statement_t *po;
@@ -8,9 +18,11 @@ statement_kind_t parse_statement(char *statement, void **p)
     statement_parser_state_t state = PARSER_STATE_COMMAND;
     int temp_len;
     char c;
+    char *before;
     for (int i = 0; i < strlen(statement); i++)
     {
         c = statement[i];
+        int de = strlen(statement);
         temp_len = strlen(temp);
         temp[temp_len] = c;
         temp[temp_len + 1] = 0;
@@ -52,7 +64,7 @@ statement_kind_t parse_statement(char *statement, void **p)
             }
             else
             {
-                printf("syntax error at %d FROM expected\n", i - strlen(temp) + 1);
+                printf("syntax error at %ld FROM expected\n", i - strlen(temp) + 1);
                 return STATEMENT_KIND_ERROR;
             }
             temp[0] = 0;
@@ -91,20 +103,40 @@ statement_kind_t parse_statement(char *statement, void **p)
             strcpy(po->where.column_name, temp);
             temp[0] = 0;
         }
-        else if (state == PARSER_STATE_SELECT_WHERE_VALUE && c == '\'')
+        else if (state == PARSER_STATE_SELECT_WHERE_VALUE)
         {
-            state = PARSER_STATE_SELECT_WHERE_VALUE_STRING;
-            temp[0] = 0;
+            if (c == '\'')
+            {
+                state = PARSER_STATE_SELECT_WHERE_VALUE_STRING;
+                temp[0] = 0;
+            }
+            else
+            {
+                state = PARSER_STATE_SELECT_WHERE_VALUE_INT;
+            }
         }
-        else if (state == PARSER_STATE_SELECT_WHERE_VALUE_STRING && c == '\'')
+        else if (state == PARSER_STATE_SELECT_WHERE_VALUE_STRING && strlen(statement) - 1 == i)
         {
-            temp[strlen(temp) - 1] = 0;
+            if (c == '\'')
+            {
+                po->where.value = (char *)malloc(sizeof(char) * strlen(temp) + 1);
+                temp[strlen(temp) - 1] = 0;
+                strcpy(po->where.value, temp);
+                return STATEMENT_KIND_SELECT;
+            }
+            printf("syntax error at %d: expected '\n", i);
+            return STATEMENT_KIND_ERROR;
+        }
+        else if (state == PARSER_STATE_SELECT_WHERE_VALUE_INT && strlen(statement) - 1 == i)
+        {
+            if (is_int(temp))
+            {
+                printf("syntax error at %ld: expected an integer\n", i - strlen(temp));
+                return STATEMENT_KIND_ERROR;
+            }
             po->where.value = (char *)malloc(sizeof(char) * strlen(temp) + 1);
             strcpy(po->where.value, temp);
             return STATEMENT_KIND_SELECT;
-        }
-        else if (state == PARSER_STATE_SELECT_WHERE_VALUE_INT)
-        {
         }
     }
 }
